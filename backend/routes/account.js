@@ -15,20 +15,24 @@ router.get("/balance", authMiddleware, async (req, res) => {
   });
 });
 
-router.post("/transfer", async (req, res) => {
+router.post("/transfer", authMiddleware, async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   const to = req.body.to;
   const amount = req.body.amount;
-  const fromAccount = await Account.findOne({ userId: req.userId });
-  if (fromAccount.balance < amount) {
+  const fromAccount = await Account.findOne({ userId: req.userId }).session(
+    session
+  );
+  if (!fromtAccount || fromAccount.balance < amount) {
+    await session.abortTransaction();
     return res.status(400).json({
       message: "Insufficient balance",
     });
   }
-  const toAccount = await Account.findOne({ userId: to });
+  const toAccount = await Account.findOne({ userId: to }).session(session);
 
   if (!toAccount) {
+    await session.abortTransaction();
     return res.status(400).json({
       message: "Invalid account",
     });
@@ -43,7 +47,7 @@ router.post("/transfer", async (req, res) => {
         balance: -amount,
       },
     }
-  );
+  ).session(session);
 
   await Account.updateOne(
     {
@@ -54,7 +58,7 @@ router.post("/transfer", async (req, res) => {
         balance: amount,
       },
     }
-  );
+  ).session(session);
 
   await session.commitTransaction();
 
